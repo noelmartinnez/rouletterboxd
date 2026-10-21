@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>Ruleta de la Watchlist</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una marquesina de cine — rueda centrada como un dial iluminado, resultado debajo como el cartel de sesión, ajustes plegados al final. Tema oscuro único, elegido a propósito. */
+:root{
+  --bg:#15120f;
+  --panel:#1f1a15;
+  --line:#3a3128;
+  --paper:#efe6d6;
+  --muted:#9a8f80;
+  --amber:#f2b53a;
+  --velvet:#b8322a;
+  --teal:#3f8f86;
+  --display:"Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --body:"Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--bg);color:var(--paper)}
+body{font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:560px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));display:flex;flex-direction:column;gap:22px}
+header{display:flex;flex-direction:column;gap:2px;text-align:center}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(40px,11vw,58px);line-height:.95;letter-spacing:.01em;text-transform:uppercase;margin:4px 0 0;text-wrap:balance;color:var(--amber)}
+.count{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.count b{color:var(--paper);font-weight:500}
+
+.stage{position:relative;width:min(100%,420px);aspect-ratio:1;margin:0 auto;max-width:100%}
+canvas{width:100%;height:100%;display:block}
+.pointer{position:absolute;left:50%;top:-6px;transform:translateX(-50%);width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:24px solid var(--paper);filter:drop-shadow(0 2px 3px rgba(0,0,0,.6));z-index:2}
+.hub{position:absolute;inset:31%;border-radius:50%;background:var(--bg);border:2px solid var(--line);display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;box-shadow:inset 0 0 24px rgba(0,0,0,.7)}
+.hub span{font-family:var(--display);font-weight:600;font-size:clamp(15px,4.4vw,20px);line-height:1.05;text-transform:uppercase;letter-spacing:.02em;color:var(--paper);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.hub.idle span{color:var(--muted)}
+
+.spin{align-self:center;font-family:var(--display);font-weight:800;font-size:26px;letter-spacing:.08em;text-transform:uppercase;background:var(--amber);color:#1a1208;border:0;border-radius:999px;padding:12px 44px;cursor:pointer;box-shadow:0 0 0 4px rgba(242,181,58,.18)}
+.spin:hover{filter:brightness(1.06)}
+.spin:disabled{opacity:.5;cursor:default}
+button:focus-visible,a:focus-visible,summary:focus-visible,textarea:focus-visible,label.file:focus-within{outline:2px solid var(--paper);outline-offset:3px}
+
+.ticket{border:1px dashed var(--line);border-radius:6px;background:var(--panel);padding:18px 18px 16px;display:flex;flex-direction:column;gap:12px}
+.ticket .eyebrow{color:var(--amber)}
+.ticket h2{font-family:var(--display);font-weight:800;font-size:clamp(30px,8vw,40px);line-height:1;text-transform:uppercase;margin:0;text-wrap:balance;overflow-wrap:anywhere}
+.ticket .meta{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.btn{font-family:var(--body);font-weight:600;font-size:14px;padding:9px 14px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--paper);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--teal);border-color:var(--teal);color:#fff}
+.btn.danger:hover{border-color:var(--velvet);color:#f0a59e}
+
+.history h3,.settings summary{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:500;margin:0}
+.history ol{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column}
+.history li{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.history li a{color:var(--paper);text-decoration:none;min-width:0;overflow-wrap:anywhere}
+.history li a:hover{color:var(--amber)}
+.history li time{font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums}
+.empty{font-size:13px;color:var(--muted);margin:8px 0 0}
+
+.settings{border-top:1px solid var(--line);padding-top:14px}
+.settings summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between}
+.settings summary::after{content:"+";font-size:14px}
+.settings[open] summary::after{content:"–"}
+.settings .inner{display:flex;flex-direction:column;gap:14px;margin-top:14px;font-size:14px;color:var(--muted)}
+.settings p{margin:0;max-width:62ch}
+.settings strong{color:var(--paper);font-weight:600}
+label.file{position:relative;overflow:hidden}
+label.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+textarea{width:100%;min-height:110px;resize:vertical;background:var(--bg);color:var(--paper);border:1px solid var(--line);border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;box-sizing:border-box}
+.status{font-family:var(--mono);font-size:12px;color:var(--amber);min-height:1.2em}
+
+@media (prefers-reduced-motion: reduce){.spin{box-shadow:none}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">letterboxd · noelmartinnez</span>
+    <h1>¿Qué vemos hoy?</h1>
+    <span class="count"><b id="n">0</b> películas en la ruleta</span>
+  </header>
+
+  <div class="stage">
+    <div class="pointer" aria-hidden="true"></div>
+    <canvas id="wheel" aria-label="Ruleta con las películas de la watchlist"></canvas>
+    <div class="hub idle" id="hub"><span id="hubText">Dale a girar</span></div>
+  </div>
+
+  <button class="spin" id="spin" type="button">Girar</button>
+
+  <section class="ticket" id="ticket" hidden aria-live="polite">
+    <span class="eyebrow">Sesión de hoy</span>
+    <h2 id="pick"></h2>
+    <span class="meta" id="pickMeta"></span>
+    <div class="row">
+      <a class="btn primary" id="lbLink" href="#" target="_blank" rel="noopener">Ver en Letterboxd ↗</a>
+      <button class="btn" id="again" type="button">Otra</button>
+      <button class="btn danger" id="remove" type="button">Ya la vi, quitar</button>
+    </div>
+  </section>
+
+  <section class="history">
+    <h3>Últimas tiradas</h3>
+    <ol id="hist"></ol>
+    <p class="empty" id="histEmpty">Todavía no has girado.</p>
+  </section>
+
+  <details class="settings">
+    <summary>Actualizar la lista</summary>
+    <div class="inner">
+      <p>La ruleta lee el <strong>watchlist.csv</strong> del repositorio. Para ponerla al día en todos tus dispositivos, exporta tus datos en Letterboxd (<strong>Settings → Data → Export your data</strong>), descomprime el zip y sustituye <strong>watchlist.csv</strong> en GitHub.</p>
+      <p>Si solo quieres probar otra lista en este dispositivo, súbela aquí:</p>
+      <div class="row">
+        <label class="btn file">Subir watchlist.csv<input type="file" id="csv" accept=".csv,text/csv"></label>
+      </div>
+      <p>O pega títulos, uno por línea:</p>
+      <textarea id="paste" placeholder="Stalker&#10;Yi Yi&#10;Tokyo Story"></textarea>
+      <div class="row">
+        <button class="btn" id="usePaste" type="button">Usar estos títulos</button>
+        <button class="btn" id="restore" type="button">Volver a la lista del repo</button>
+        <button class="btn" id="unhide" type="button">Recuperar las quitadas</button>
+      </div>
+      <span class="status" id="status"></span>
+    </div>
+  </details>
+</div>
+
+<script>
+// Copia de respaldo de watchlist.csv, por si no se puede leer (p. ej. abriendo el HTML en local).
+const ORIGINAL = [
+["Black Swan","2010","https://boxd.it/Sw0"],["Braveheart","1995","https://boxd.it/2aTI"],["The Sixth Sense","1999","https://boxd.it/29Js"],["Poor Things","2023","https://boxd.it/tNWU"],["Apocalypse Now","1979","https://boxd.it/6ZS"],["American Beauty","1999","https://boxd.it/71Y"],
+["Psycho","1960","https://boxd.it/2ab2"],["Casino","1995","https://boxd.it/2ads"],["American Gangster","2007","https://boxd.it/23wi"],["The Game","1997","https://boxd.it/26vC"],["The Iron Claw","2023","https://boxd.it/w5Pm"],["Into the Wild","2007","https://boxd.it/22m2"],
+["Children of Men","2006","https://boxd.it/1Y2i"],["Past Lives","2023","https://boxd.it/oNB8"],["The Good, the Bad and the Ugly","1966","https://boxd.it/2ape"],["The Girl with the Dragon Tattoo","2011","https://boxd.it/2Pa"],["Brazil","1985","https://boxd.it/2be2"],["There Will Be Blood","2007","https://boxd.it/20Z2"],
+["Requiem for a Dream","2000","https://boxd.it/29VI"],["The Hateful Eight","2015","https://boxd.it/8gw8"],["The Green Mile","1999","https://boxd.it/2agG"],["One Flew Over the Cuckoo's Nest","1975","https://boxd.it/2aeA"],["Pan's Labyrinth","2006","https://boxd.it/28No"],["Mr. Nobody","2009","https://boxd.it/1k44"],
+["Cast Away","2000","https://boxd.it/20i8"],["Perfect Days","2023","https://boxd.it/ATh8"],["The Matrix","1999","https://boxd.it/2a1m"],["Ghost in the Shell","1995","https://boxd.it/1YYc"],["Whisper of the Heart","1995","https://boxd.it/17uy"],["The Tale of The Princess Kaguya","2013","https://boxd.it/4JQI"],
+["Beautiful Boy","2018","https://boxd.it/g76Q"],["Anatomy of a Fall","2023","https://boxd.it/yuDE"],["The Perks of Being a Wallflower","2012","https://boxd.it/2ZA8"],["The Virgin Suicides","1999","https://boxd.it/28JG"],["Cinema Paradiso","1988","https://boxd.it/1UlA"],["Volver","2006","https://boxd.it/2aQO"],
+["It's a Wonderful Life","1946","https://boxd.it/28xA"],["I Swear","2025","https://boxd.it/Og8k"],["Manchester by the Sea","2016","https://boxd.it/b2L0"],["Green Book","2018","https://boxd.it/hErk"],["Spotlight","2015","https://boxd.it/a84k"],["Birdman or (The Unexpected Virtue of Ignorance)","2014","https://boxd.it/5RFA"],
+["Talk to Her","2002","https://boxd.it/2beG"],["Paris, Texas","1984","https://boxd.it/29Ts"],["Vertigo","1958","https://boxd.it/2apI"],["Trainspotting","1996","https://boxd.it/29XY"],["Once Upon a Time... in Hollywood","2019","https://boxd.it/gH0O"],["Bugonia","2025","https://boxd.it/qeWY"],
+["Eyes Wide Shut","1999","https://boxd.it/2axs"],["After Hours","1985","https://boxd.it/1VfS"],["Only Yesterday","1991","https://boxd.it/1MR4"],["Vampire Hunter D: Bloodlust","2000","https://boxd.it/1L3i"],["Metropolis","1927","https://boxd.it/71a"],["Coco","2017","https://boxd.it/bYJQ"],
+["Raging Bull","1980","https://boxd.it/28yI"],["Come and See","1985","https://boxd.it/1w9q"],["The Apartment","1960","https://boxd.it/2aGE"],["The Elephant Man","1980","https://boxd.it/27LQ"],["My Own Private Idaho","1991","https://boxd.it/2ak4"],["Bad Education","2004","https://boxd.it/2b2K"],
+["Roma","2018","https://boxd.it/f69M"],["Citizen Kane","1941","https://boxd.it/71O"],["Casino Royale","2006","https://boxd.it/1alk"],["Jackie Brown","1997","https://boxd.it/2aVO"],["Manhattan","1979","https://boxd.it/29Na"],["Z","1969","https://boxd.it/26pY"],
+["Wings of Desire","1987","https://boxd.it/2b26"],["Some Like It Hot","1959","https://boxd.it/2aNA"],["Once Upon a Time in America","1984","https://boxd.it/2aCs"],["The Deer Hunter","1978","https://boxd.it/1T6O"],["Primal Fear","1996","https://boxd.it/28ws"],["(500) Days of Summer","2009","https://boxd.it/1EmM"],
+["Baby Driver","2017","https://boxd.it/bhF2"],["Conclave","2024","https://boxd.it/AO8q"],["Soul","2020","https://boxd.it/ioLA"],["Hamnet","2025","https://boxd.it/woVy"],["About Time","2013","https://boxd.it/43bI"],["Fargo","1996","https://boxd.it/2aHM"],
+["Killers of the Flower Moon","2023","https://boxd.it/gHp0"],["Babylon","2022","https://boxd.it/mM02"],["Little Women","2019","https://boxd.it/aSVk"],["The Big Short","2015","https://boxd.it/ajZw"],["Hacksaw Ridge","2016","https://boxd.it/azew"],["Almost Famous","2000","https://boxd.it/29CQ"],
+["Big Fish","2003","https://boxd.it/2a3M"],["Chef","2014","https://boxd.it/6lCG"],["Amour","2012","https://boxd.it/34Q6"],["Oasis","2002","https://boxd.it/1sO0"],["Dogville","2003","https://boxd.it/2a8W"],["Drive My Car","2021","https://boxd.it/sv94"],
+["So Long, My Son","2019","https://boxd.it/hNzi"],["The Great Beauty","2013","https://boxd.it/5ty6"],["La Chimera","2023","https://boxd.it/vzVi"],["Leviathan","2014","https://boxd.it/7Ub8"],["A Separation","2011","https://boxd.it/gvo"],["Sleepers","1996","https://boxd.it/29xw"],
+["Open Your Eyes","1997","https://boxd.it/27TU"],["Beasts of No Nation","2015","https://boxd.it/8Lp8"],["I Vitelloni","1953","https://boxd.it/1RJE"],["Day for Night","1973","https://boxd.it/28kG"],["Small Change","1976","https://boxd.it/28mM"],["Annie Hall","1977","https://boxd.it/29M2"],
+["La Belle Noiseuse","1991","https://boxd.it/1RxI"],["Silence","2016","https://boxd.it/2cAo"],["Persona","1966","https://boxd.it/29B4"],["Ikiru","1952","https://boxd.it/251c"],["The Handmaiden","2016","https://boxd.it/948A"],["Alcarràs","2022","https://boxd.it/uh2i"],
+["The Realm","2018","https://boxd.it/iL3w"],["Magical Girl","2014","https://boxd.it/8JQG"],["My Life Without Me","2003","https://boxd.it/710"],["Sundays","2025","https://boxd.it/TqIW"],["Mondays in the Sun","2002","https://boxd.it/tWs"],["Take My Eyes","2003","https://boxd.it/28Ne"],
+["A Poet","2025","https://boxd.it/UkD4"],["Warrior","2011","https://boxd.it/i3G"],["It Happened One Night","1934","https://boxd.it/25Ng"],["Biutiful","2010","https://boxd.it/OiI"],["Thirst","2009","https://boxd.it/1Aqq"],["The Wailing","2016","https://boxd.it/9fLy"],
+["The Host","2006","https://boxd.it/28ZY"],["Mother","2009","https://boxd.it/1m9g"],["New World","2013","https://boxd.it/588Q"],["Poetry","2010","https://boxd.it/JAs"],["Secret Sunshine","2007","https://boxd.it/27CY"],["A Bittersweet Life","2005","https://boxd.it/1U4Y"],
+["Swiss Army Man","2016","https://boxd.it/bDG2"],["Rocky","1976","https://boxd.it/28Uk"],["Princesses","2005","https://boxd.it/2932"],["Yi Yi","2000","https://boxd.it/1vCw"],["A Man Escaped","1956","https://boxd.it/1MzY"],["Blade Runner","1982","https://boxd.it/2bcA"],
+["The Man Who Shot Liberty Valance","1962","https://boxd.it/1Tdg"],["The Searchers","1956","https://boxd.it/25HC"],["Stagecoach","1939","https://boxd.it/297S"],["The Grapes of Wrath","1940","https://boxd.it/2a2u"],["Dog Day Afternoon","1975","https://boxd.it/29bg"],["The Conversation","1974","https://boxd.it/2a38"],
+["Sunrise: A Song of Two Humans","1927","https://boxd.it/29Xk"],["Rapture","1979","https://boxd.it/24f8"],["The Spirit of the Beehive","1973","https://boxd.it/24eY"],["Barry Lyndon","1975","https://boxd.it/25A2"],["Le Cercle Rouge","1970","https://boxd.it/1Tjy"],["Le Samouraï","1967","https://boxd.it/22ZI"],
+["Cléo from 5 to 7","1962","https://boxd.it/2agm"],["Ugetsu","1953","https://boxd.it/1NyM"],["Tokyo Story","1953","https://boxd.it/1HuY"],["Man with a Movie Camera","1929","https://boxd.it/1u7s"],["The Wages of Fear","1953","https://boxd.it/2aSK"],["Harakiri","1962","https://boxd.it/1NTU"],
+["Happy Together","1997","https://boxd.it/1Ha0"],["La Dolce Vita","1960","https://boxd.it/2anC"],["Rear Window","1954","https://boxd.it/2a6Q"],["Seven Samurai","1954","https://boxd.it/2axi"],["Hour of the Wolf","1968","https://boxd.it/1H9G"],["Stalker","1979","https://boxd.it/28PO"],
+["Before Night Falls","2000","https://boxd.it/23to"],["Lovers of the Arctic Circle","1998","https://boxd.it/28NS"],["Brokeback Mountain","2005","https://boxd.it/2b2q"],["Boogie Nights","1997","https://boxd.it/23um"],["Magnolia","1999","https://boxd.it/2aze"],["When Harry Met Sally...","1989","https://boxd.it/29W2"],
+["Chungking Express","1994","https://boxd.it/1UDa"],["Blue Velvet","1986","https://boxd.it/29BI"],["All About Lily Chou-Chou","2001","https://boxd.it/1JP0"],["Singin' in the Rain","1952","https://boxd.it/29oY"],["Once Upon a Time in the West","1968","https://boxd.it/2az4"],["Sunset Boulevard","1950","https://boxd.it/2a20"],
+["The Pursuit of Happyness","2006","https://boxd.it/28PE"],["How to Train Your Dragon: The Hidden World","2019","https://boxd.it/5a9w"],["Enemy","2013","https://boxd.it/5xtO"],["Ex Machina","2015","https://boxd.it/7T2k"],["The Sound of Music","1965","https://boxd.it/1MLK"],["Amores Perros","2000","https://boxd.it/2bfu"],
+["High and Low","1963","https://boxd.it/1RSc"],["I Am Cuba","1964","https://boxd.it/1hUQ"],["How to Make Millions Before Grandma Dies","2024","https://boxd.it/FLa4"],["The General","1926","https://boxd.it/29co"],["Twelve Monkeys","1995","https://boxd.it/2beQ"],["Breakfast at Tiffany's","1961","https://boxd.it/2aYS"],
+["Viridiana","1961","https://boxd.it/24eE"],["Sicario","2015","https://boxd.it/8i7u"],["Superbad","2007","https://boxd.it/20hO"],["Die Hard","1988","https://boxd.it/2a7u"],["Death Proof","2007","https://boxd.it/27GG"],["Aliens","1986","https://boxd.it/29PA"],
+["Dawn of the Dead","1978","https://boxd.it/29gU"],["Paprika","2006","https://boxd.it/23wW"],["The Master","2012","https://boxd.it/2cBG"],["The Act of Killing","2012","https://boxd.it/44Cg"],["Hunting a Monster","2024","https://boxd.it/Q7Yq"],["Paterson","2016","https://boxd.it/cRk2"],
+["Possession","1981","https://boxd.it/1BPm"],["8 Mile","2002","https://boxd.it/2bew"],["Braindead","1992","https://boxd.it/29Gy"],["Carlito's Way","1993","https://boxd.it/226e"],["The Count of Monte Cristo","2024","https://boxd.it/F1Nk"],["The Zone of Interest","2023","https://boxd.it/gJsA"],
+["Knives Out","2019","https://boxd.it/jWEA"],["For a Few Dollars More","1965","https://boxd.it/29eu"],["Ordet","1955","https://boxd.it/Jiy"],["The Passion of Joan of Arc","1928","https://boxd.it/29DO"],["The Big Lebowski","1998","https://boxd.it/2b6C"],["The Celebration","1998","https://boxd.it/2aCM"],
+["2046","2004","https://boxd.it/29tu"],["Hell House LLC","2015","https://boxd.it/cdjy"],["F1","2025","https://boxd.it/yjVM"],["Skyfall","2012","https://boxd.it/17Fc"],["Top Gun: Maverick","2022","https://boxd.it/cjr4"],["Fury","2014","https://boxd.it/6JwC"],
+["Ran","1985","https://boxd.it/1Tlu"],["Ivan's Childhood","1962","https://boxd.it/1j6y"],["The Emigrants","1971","https://boxd.it/114u"],["The Assassination of Jesse James by the Coward Robert Ford","2007","https://boxd.it/24dG"],["The Curious Case of Benjamin Button","2008","https://boxd.it/23Fk"],["Bicycle Thieves","1948","https://boxd.it/23hW"],
+["Blade Runner 2049","2017","https://boxd.it/b8wK"],["Meiyazhagan","2024","https://boxd.it/GYue"],["The Lunchbox","2013","https://boxd.it/5MOs"],["Anand","1971","https://boxd.it/1uhM"],["Devi","1960","https://boxd.it/Vt4"],["Nostalgia","1983","https://boxd.it/28Qi"],
+["Autumn Sonata","1978","https://boxd.it/1Rio"],["Pather Panchali","1955","https://boxd.it/22yC"],["Mirror","1975","https://boxd.it/28Q8"],["1917","2019","https://boxd.it/jj4y"],["A Hidden Life","2019","https://boxd.it/eb1Q"],["Solaris","1972","https://boxd.it/2a2Y"],
+["You Can See Everything","2026","https://boxd.it/16mVo"]
+].map(([title,year,uri])=>({title,year,uri}));
+
+const store = {
+  get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},
+  del(k){try{localStorage.removeItem(k)}catch(e){}}
+};
+
+let source = store.get("rw.list", null) || ORIGINAL;
+let repoList = null, repoSig = null;
+let hidden = new Set(store.get("rw.hidden", []));
+let history = store.get("rw.history", []);
+let films = [];
+let rot = 0, spinning = false, current = null;
+
+const $ = id => document.getElementById(id);
+const cv = $("wheel"), ctx = cv.getContext("2d");
+const COLORS = ["#b8322a","#f2b53a","#2a231c","#3f8f86","#d9cdb8","#2a231c"];
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function rebuild(){
+  films = source.filter(f => !hidden.has(f.title));
+  $("n").textContent = films.length;
+  $("spin").disabled = films.length === 0;
+  draw();
+}
+
+function size(){
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width*d); cv.height = Math.round(r.height*d);
+  draw();
+}
+
+function draw(lit){
+  const W = cv.width, R = W/2, n = films.length;
+  ctx.clearRect(0,0,W,W);
+  ctx.save(); ctx.translate(R,R);
+  // rim
+  ctx.beginPath(); ctx.arc(0,0,R*0.985,0,Math.PI*2); ctx.fillStyle="#2a231c"; ctx.fill();
+  if(n){
+    const step = Math.PI*2/n, rIn = R*0.84;
+    ctx.save(); ctx.rotate(rot);
+    for(let i=0;i<n;i++){
+      ctx.beginPath(); ctx.moveTo(0,0);
+      ctx.arc(0,0,rIn,i*step,(i+1)*step+0.002);
+      ctx.closePath(); ctx.fillStyle = COLORS[i%COLORS.length]; ctx.fill();
+    }
+    ctx.restore();
+  }
+  // marquee bulbs
+  const bulbs = 36;
+  for(let b=0;b<bulbs;b++){
+    const a = b/bulbs*Math.PI*2, on = lit===undefined ? b%2===0 : (b+lit)%3===0;
+    ctx.beginPath(); ctx.arc(Math.cos(a)*R*0.915, Math.sin(a)*R*0.915, R*0.022, 0, Math.PI*2);
+    ctx.fillStyle = on ? "#f2b53a" : "#5a4a35"; ctx.fill();
+  }
+  ctx.restore();
+}
+
+function indexAt(r){
+  const n = films.length, step = Math.PI*2/n;
+  const a = ((-Math.PI/2 - r) % (Math.PI*2) + Math.PI*2) % (Math.PI*2);
+  return Math.min(n-1, Math.floor(a/step));
+}
+
+function rand(n){
+  const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n;
+}
+
+function setHub(t, idle){
+  $("hubText").textContent = t;
+  $("hub").classList.toggle("idle", !!idle);
+}
+
+function lbUrl(f){
+  return f.uri || ("https://letterboxd.com/search/films/" + encodeURIComponent(f.title) + "/");
+}
+
+function spin(){
+  if(spinning || !films.length) return;
+  spinning = true; $("spin").disabled = true;
+  const n = films.length, step = Math.PI*2/n, target = rand(n);
+  const jitter = (Math.random()-0.5)*step*0.7;
+  const want = -Math.PI/2 - (target+0.5)*step - jitter;
+  const TAU = Math.PI*2;
+  const delta = ((want - rot) % TAU + TAU) % TAU;
+  const start = rot, total = delta + TAU*(reduce ? 1 : 7);
+  const dur = reduce ? 600 : 5200, t0 = performance.now();
+  let lastIdx = -1;
+  function frame(now){
+    const p = Math.min(1,(now-t0)/dur), e = 1 - Math.pow(1-p, 4);
+    rot = start + total*e;
+    const idx = indexAt(rot);
+    if(idx !== lastIdx){ lastIdx = idx; setHub(films[idx].title); }
+    draw(Math.floor(now/90));
+    if(p < 1) requestAnimationFrame(frame);
+    else { rot = rot % TAU; draw(); done(films[indexAt(rot)]); }
+  }
+  requestAnimationFrame(frame);
+}
+
+function done(f){
+  spinning = false; $("spin").disabled = false; current = f;
+  setHub(f.title);
+  $("pick").textContent = f.title;
+  $("pickMeta").textContent = (f.year ? f.year + " · " : "") + "1 de " + films.length + " en tu watchlist";
+  $("lbLink").href = lbUrl(f);
+  $("ticket").hidden = false;
+  history.unshift({title:f.title, uri:f.uri||null, at:Date.now()});
+  history = history.slice(0,8); store.set("rw.history", history);
+  renderHistory();
+}
+
+function renderHistory(){
+  const ol = $("hist"); ol.innerHTML = "";
+  $("histEmpty").hidden = history.length > 0;
+  const fmt = new Intl.DateTimeFormat("es-ES",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+  history.forEach(h=>{
+    const li = document.createElement("li");
+    const a = document.createElement("a"); a.href = lbUrl(h); a.target="_blank"; a.rel="noopener"; a.textContent = h.title;
+    const t = document.createElement("time"); t.textContent = fmt.format(new Date(h.at));
+    li.append(a,t); ol.append(li);
+  });
+}
+
+function status(msg){ $("status").textContent = msg; }
+
+function parseCSV(text){
+  const rows = []; let row = [], f = "", q = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++} else q=false } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===','){ row.push(f); f=""; }
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++; row.push(f); rows.push(row); row=[]; f=""; }
+    else f+=c;
+  }
+  if(f||row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r=>r.some(x=>x.trim()));
+}
+
+// null si falta la columna Name
+function filmsFromCSV(text){
+  const rows = parseCSV(text.replace(/^﻿/, ""));
+  const head = rows.shift() || [];
+  const iName = head.findIndex(h=>/^name$/i.test(h.trim()));
+  const iYear = head.findIndex(h=>/^year$/i.test(h.trim()));
+  const iUri = head.findIndex(h=>/uri/i.test(h));
+  if(iName < 0) return null;
+  return rows.map(r=>({title:(r[iName]||"").trim(), year:iYear>=0?r[iYear]:"", uri:iUri>=0?r[iUri]:""})).filter(f=>f.title);
+}
+
+// Huella del CSV del repo, para saber si ha cambiado desde que se subió una lista propia
+function sig(text){
+  let h = 0; for(let i=0;i<text.length;i++) h = (h*31 + text.charCodeAt(i)) | 0;
+  return text.length + ":" + h;
+}
+
+function useOwn(list){
+  source = list; store.set("rw.list", list); store.set("rw.listBase", repoSig); rebuild();
+}
+
+async function loadRepo(){
+  const own = store.get("rw.list", null);
+  try{
+    const res = await fetch("watchlist.csv", {cache:"no-cache"});
+    if(!res.ok) throw new Error(res.status);
+    const text = await res.text();
+    const list = filmsFromCSV(text);
+    if(!list || !list.length) throw new Error("csv vacío");
+    repoList = list; repoSig = sig(text);
+  }catch(e){
+    if(!own) status("No se pudo leer watchlist.csv; uso la copia de respaldo.");
+    return;
+  }
+  if(own && store.get("rw.listBase", null) === repoSig){
+    status("Usando tu lista propia. «Volver a la lista del repo» para descartarla.");
+    return;
+  }
+  if(own){
+    store.del("rw.list"); store.del("rw.listBase");
+    status("watchlist.csv del repo ha cambiado; descarto la lista propia de este dispositivo.");
+  }
+  source = repoList; rebuild();
+}
+
+$("csv").addEventListener("change", e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    const list = filmsFromCSV(String(rd.result));
+    if(!list){ status("Ese archivo no tiene columna Name. Sube el watchlist.csv del export."); return; }
+    if(!list.length){ status("El archivo no tiene películas."); return; }
+    useOwn(list);
+    status(list.length + " películas cargadas desde el CSV (solo en este dispositivo).");
+  };
+  rd.readAsText(file);
+  e.target.value = "";
+});
+
+$("usePaste").addEventListener("click", ()=>{
+  const list = $("paste").value.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(t=>({title:t}));
+  if(!list.length){ status("Pega al menos un título."); return; }
+  useOwn(list);
+  status(list.length + " títulos en la ruleta.");
+});
+$("restore").addEventListener("click", ()=>{
+  source = repoList || ORIGINAL; store.del("rw.list"); store.del("rw.listBase"); rebuild();
+  status("Lista del repo restaurada.");
+});
+$("unhide").addEventListener("click", ()=>{
+  const k = hidden.size; hidden.clear(); store.set("rw.hidden", []); rebuild();
+  status(k ? k + " películas vuelven a la ruleta." : "No habías quitado ninguna.");
+});
+$("spin").addEventListener("click", spin);
+$("again").addEventListener("click", spin);
+$("remove").addEventListener("click", ()=>{
+  if(!current) return;
+  hidden.add(current.title); store.set("rw.hidden", [...hidden]);
+  $("ticket").hidden = true; setHub("Quitada. Gira otra vez", true); current = null; rebuild();
+});
+
+new ResizeObserver(size).observe(cv);
+rebuild(); renderHistory(); loadRepo();
+</script>
+
+</body>
+</html>
