@@ -73,6 +73,8 @@ button:focus-visible,a:focus-visible,summary:focus-visible,textarea:focus-visibl
 .settings strong{color:var(--paper);font-weight:600}
 label.file{position:relative;overflow:hidden}
 label.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+input[type=password]{flex:1 1 180px;min-width:0;background:var(--bg);color:var(--paper);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-family:var(--mono);font-size:16px}
+input[type=password]:focus-visible{outline:2px solid var(--paper);outline-offset:3px}
 textarea{width:100%;min-height:110px;resize:vertical;background:var(--bg);color:var(--paper);border:1px solid var(--line);border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;box-sizing:border-box}
 .status{font-family:var(--mono);font-size:12px;color:var(--amber);min-height:1.2em}
 
@@ -85,7 +87,7 @@ textarea{width:100%;min-height:110px;resize:vertical;background:var(--bg);color:
   <header>
     <span class="eyebrow">letterboxd · noelmartinnez</span>
     <h1>¿Qué vemos hoy?</h1>
-    <span class="count"><b id="n">0</b> películas en la ruleta</span>
+    <span class="count"><b id="n">0</b> películas en la ruleta · <span id="sync">…</span></span>
   </header>
 
   <div class="stage">
@@ -114,10 +116,17 @@ textarea{width:100%;min-height:110px;resize:vertical;background:var(--bg);color:
   </section>
 
   <details class="settings">
-    <summary>Actualizar la lista</summary>
+    <summary>Ajustes</summary>
     <div class="inner">
-      <p>La ruleta lee el <strong>watchlist.csv</strong> del repositorio. Para ponerla al día en todos tus dispositivos, exporta tus datos en Letterboxd (<strong>Settings → Data → Export your data</strong>), descomprime el zip y sustituye <strong>watchlist.csv</strong> en GitHub.</p>
-      <p>Si solo quieres probar otra lista en este dispositivo, súbela aquí:</p>
+      <p><strong>Sincronizar entre dispositivos.</strong> Pega un token de GitHub con permiso <strong>Contents: Read and write</strong> solo para este repo. Se guarda únicamente en este navegador; sin él puedes girar, pero lo que quites no llega a tus otros dispositivos.</p>
+      <div class="row" id="tokenForm">
+        <input type="password" id="token" placeholder="github_pat_…" autocomplete="off" spellcheck="false" aria-label="Token de GitHub">
+        <button class="btn" id="saveToken" type="button">Guardar token</button>
+      </div>
+      <div class="row" id="tokenSet" hidden>
+        <button class="btn" id="forgetToken" type="button">Olvidar el token en este dispositivo</button>
+      </div>
+      <p><strong>Actualizar la lista.</strong> Exporta tus datos en Letterboxd (<strong>Settings → Data → Export your data</strong>), descomprime el zip y sube aquí <strong>watchlist.csv</strong>. Con el token se guarda en el repo y cambia en todos tus dispositivos; sin él, solo en este.</p>
       <div class="row">
         <label class="btn file">Subir watchlist.csv<input type="file" id="csv" accept=".csv,text/csv"></label>
       </div>
@@ -185,8 +194,9 @@ const store = {
 
 let source = store.get("rw.list", null) || ORIGINAL;
 let repoList = null, repoSig = null;
-let hidden = new Set(store.get("rw.hidden", []));
-let history = store.get("rw.history", []);
+// Estado compartido entre dispositivos (estado.json en el repo); localStorage hace de caché
+let state = store.get("rw.state", {vistas:[], historial:[]});
+let hidden = new Set(), history = [];
 let films = [];
 let rot = 0, spinning = false, current = null;
 
@@ -195,8 +205,10 @@ const cv = $("wheel"), ctx = cv.getContext("2d");
 const COLORS = ["#b8322a","#f2b53a","#2a231c","#3f8f86","#d9cdb8","#2a231c"];
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+const key = f => f.uri || f.title;
+
 function rebuild(){
-  films = source.filter(f => !hidden.has(f.title));
+  films = source.filter(f => !hidden.has(key(f)));
   $("n").textContent = films.length;
   $("spin").disabled = films.length === 0;
   draw();
@@ -283,9 +295,8 @@ function done(f){
   $("pickMeta").textContent = (f.year ? f.year + " · " : "") + "1 de " + films.length + " en tu watchlist";
   $("lbLink").href = lbUrl(f);
   $("ticket").hidden = false;
-  history.unshift({title:f.title, uri:f.uri||null, at:Date.now()});
-  history = history.slice(0,8); store.set("rw.history", history);
-  renderHistory();
+  const entry = {title:f.title, uri:f.uri||null, at:Date.now()};
+  change(s => ({...s, historial:[entry, ...s.historial.filter(h=>h.at!==entry.at)].slice(0,8)}), "Tirada: " + f.title);
 }
 
 function renderHistory(){
@@ -318,7 +329,7 @@ function parseCSV(text){
 
 // null si falta la columna Name
 function filmsFromCSV(text){
-  const rows = parseCSV(text.replace(/^﻿/, ""));
+  const rows = parseCSV(text.replace(/^\uFEFF/, ""));
   const head = rows.shift() || [];
   const iName = head.findIndex(h=>/^name$/i.test(h.trim()));
   const iYear = head.findIndex(h=>/^year$/i.test(h.trim()));
@@ -337,12 +348,122 @@ function useOwn(list){
   source = list; store.set("rw.list", list); store.set("rw.listBase", repoSig); rebuild();
 }
 
+// --- GitHub: el repo se deduce de la URL de Pages (usuario.github.io/repo) ---
+function repoFromUrl(){
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/i);
+  if(!m) return null;
+  const seg = location.pathname.split("/").filter(Boolean)[0];
+  return m[1] + "/" + (seg && !/\.html?$/i.test(seg) ? seg : m[1] + ".github.io");
+}
+const REPO = store.get("rw.repo", null) || repoFromUrl();
+let token = store.get("rw.token", null);
+
+function gh(path, opts={}){
+  const headers = {"Accept":"application/vnd.github+json", ...opts.headers};
+  if(token) headers.Authorization = "Bearer " + token;
+  return fetch("https://api.github.com/repos/" + REPO + path, {...opts, headers, cache:"no-store"});
+}
+
+const b64 = {
+  dec(s){ return new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g,"")), c=>c.charCodeAt(0))); },
+  enc(s){ let bin = ""; for(const b of new TextEncoder().encode(s)) bin += String.fromCharCode(b); return btoa(bin); }
+};
+
+// text es null si el fichero aún no existe
+async function readFile(name){
+  const res = await gh("/contents/" + name);
+  if(res.status === 404) return {text:null, sha:null};
+  if(!res.ok) throw new Error("GitHub " + res.status);
+  const j = await res.json();
+  return {text:b64.dec(j.content), sha:j.sha};
+}
+
+async function writeFile(name, text, sha, message){
+  const res = await gh("/contents/" + name, {method:"PUT", body:JSON.stringify({message, content:b64.enc(text), sha:sha||undefined})});
+  if(res.status === 409 || res.status === 422) throw Object.assign(new Error("conflicto"), {conflict:true});
+  if(res.status === 401) throw new Error("token caducado o no válido");
+  if(res.status === 403 || res.status === 404) throw new Error("el token no puede escribir en " + REPO);
+  if(!res.ok) throw new Error("GitHub " + res.status);
+}
+
+function setSync(t){ $("sync").textContent = t; }
+
+function applyState(s){
+  state = {vistas:s.vistas||[], historial:s.historial||[]};
+  store.set("rw.state", state);
+  hidden = new Set(state.vistas.map(v=>v.key));
+  history = state.historial;
+  if(!spinning) rebuild();
+  renderHistory();
+}
+
+let queue = Promise.resolve();
+
+// Aplica fn al estado local al momento y, con token, a estado.json del repo.
+// Relee el fichero antes de escribir para no pisar lo que haya guardado otro dispositivo.
+function change(fn, message){
+  applyState(fn(structuredClone(state)));
+  if(!REPO || !token) return;
+  queue = queue.then(async ()=>{
+    for(let i=0;i<3;i++){
+      try{
+        const {text, sha} = await readFile("estado.json");
+        const next = fn(text ? JSON.parse(text) : {vistas:[], historial:[]});
+        await writeFile("estado.json", JSON.stringify(next, null, 1) + "\n", sha, message);
+        applyState(next); setSync("sincronizado");
+        return;
+      }catch(e){
+        if(!e.conflict){ setSync("sin sincronizar"); status("No se pudo guardar en GitHub: " + e.message + "."); return; }
+      }
+    }
+    setSync("sin sincronizar");
+  });
+}
+
+async function loadState(){
+  if(!REPO){ setSync("solo este dispositivo"); return; }
+  try{
+    const {text} = await readFile("estado.json");
+    if(text) applyState(JSON.parse(text));
+    setSync(token ? "sincronizado" : "solo lectura");
+  }catch(e){
+    setSync("sin conexión con GitHub");
+  }
+}
+
+// Por la API se ve el CSV recién subido; Pages tarda unos minutos en servirlo
+async function fetchCSV(){
+  if(REPO){
+    try{ const {text} = await readFile("watchlist.csv"); if(text) return text; }catch(e){}
+  }
+  const res = await fetch("watchlist.csv", {cache:"no-cache"});
+  if(!res.ok) throw new Error(res.status);
+  return res.text();
+}
+
+async function uploadCSV(text, list){
+  status("Subiendo watchlist.csv a GitHub…");
+  try{
+    const {sha} = await readFile("watchlist.csv");
+    await writeFile("watchlist.csv", text, sha, "Actualizar watchlist");
+  }catch(e){
+    status("No se pudo subir a GitHub: " + e.message + ".");
+    return;
+  }
+  repoList = list; repoSig = sig(text); source = list;
+  store.del("rw.list"); store.del("rw.listBase"); rebuild();
+  status(list.length + " películas. watchlist.csv actualizado en el repo para todos tus dispositivos.");
+}
+
+function renderToken(){
+  $("tokenForm").hidden = !!token;
+  $("tokenSet").hidden = !token;
+}
+
 async function loadRepo(){
   const own = store.get("rw.list", null);
   try{
-    const res = await fetch("watchlist.csv", {cache:"no-cache"});
-    if(!res.ok) throw new Error(res.status);
-    const text = await res.text();
+    const text = await fetchCSV();
     const list = filmsFromCSV(text);
     if(!list || !list.length) throw new Error("csv vacío");
     repoList = list; repoSig = sig(text);
@@ -365,9 +486,11 @@ $("csv").addEventListener("change", e=>{
   const file = e.target.files[0]; if(!file) return;
   const rd = new FileReader();
   rd.onload = () => {
-    const list = filmsFromCSV(String(rd.result));
+    const text = String(rd.result);
+    const list = filmsFromCSV(text);
     if(!list){ status("Ese archivo no tiene columna Name. Sube el watchlist.csv del export."); return; }
     if(!list.length){ status("El archivo no tiene películas."); return; }
+    if(REPO && token){ uploadCSV(text, list); return; }
     useOwn(list);
     status(list.length + " películas cargadas desde el CSV (solo en este dispositivo).");
   };
@@ -386,19 +509,38 @@ $("restore").addEventListener("click", ()=>{
   status("Lista del repo restaurada.");
 });
 $("unhide").addEventListener("click", ()=>{
-  const k = hidden.size; hidden.clear(); store.set("rw.hidden", []); rebuild();
-  status(k ? k + " películas vuelven a la ruleta." : "No habías quitado ninguna.");
+  const k = hidden.size;
+  if(!k){ status("No habías quitado ninguna."); return; }
+  change(s => ({...s, vistas:[]}), "Recuperar quitadas");
+  status(k === 1 ? "1 película vuelve a la ruleta." : k + " películas vuelven a la ruleta.");
 });
 $("spin").addEventListener("click", spin);
 $("again").addEventListener("click", spin);
 $("remove").addEventListener("click", ()=>{
   if(!current) return;
-  hidden.add(current.title); store.set("rw.hidden", [...hidden]);
-  $("ticket").hidden = true; setHub("Quitada. Gira otra vez", true); current = null; rebuild();
+  const k = key(current), title = current.title, at = Date.now();
+  // de paso limpia las vistas que ya no están en la watchlist del repo
+  const keys = repoList ? new Set(repoList.map(key)) : null;
+  change(s => ({...s, vistas:[...s.vistas.filter(v => v.key !== k && (!keys || keys.has(v.key))), {key:k, title, at}]}), "Vista: " + title);
+  $("ticket").hidden = true; setHub("Quitada. Gira otra vez", true); current = null;
+  if(!token) status("Quitada solo en este dispositivo. Guarda un token para que se quite en todos.");
+});
+$("saveToken").addEventListener("click", async ()=>{
+  const t = $("token").value.trim(); if(!t) return;
+  if(!REPO){ status("No detecto el repo: abre la página desde su dirección de github.io."); return; }
+  const res = await fetch("https://api.github.com/repos/" + REPO, {headers:{Authorization:"Bearer " + t}, cache:"no-store"}).catch(()=>null);
+  if(!res || !res.ok){ status(res && res.status === 401 ? "Ese token no es válido." : "No se pudo comprobar el token con GitHub."); return; }
+  token = t; store.set("rw.token", t); $("token").value = ""; renderToken();
+  status("Token guardado. Lo que quites y tus tiradas se compartirán entre dispositivos.");
+  loadState();
+});
+$("forgetToken").addEventListener("click", ()=>{
+  token = null; store.del("rw.token"); renderToken(); setSync(REPO ? "solo lectura" : "solo este dispositivo");
+  status("Token borrado de este dispositivo.");
 });
 
 new ResizeObserver(size).observe(cv);
-rebuild(); renderHistory(); loadRepo();
+applyState(state); renderToken(); loadRepo(); loadState();
 </script>
 
 </body>
