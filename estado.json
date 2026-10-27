@@ -2,6 +2,11 @@
  "vistas": [],
  "historial": [
   {
+   "title": "La Dolce Vita",
+   "uri": "https://boxd.it/2anC",
+   "at": 1793130760983
+  },
+  {
    "title": "Dog Day Afternoon",
    "uri": "https://boxd.it/29bg",
    "at": 1793130747596
@@ -35,11 +40,6 @@
    "title": "Swiss Army Man",
    "uri": "https://boxd.it/bDG2",
    "at": 1793130624840
-  },
-  {
-   "title": "One Flew Over the Cuckoo's Nest",
-   "uri": "https://boxd.it/2aeA",
-   "at": 1792790450733
   }
  ]
 }
