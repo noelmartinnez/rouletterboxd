@@ -2,6 +2,11 @@
  "vistas": [],
  "historial": [
   {
+   "title": "Green Book",
+   "uri": "https://boxd.it/hErk",
+   "at": 1793130729092
+  },
+  {
    "title": "Poetry",
    "uri": "https://boxd.it/JAs",
    "at": 1793130709305
@@ -35,11 +40,6 @@
    "title": "The Spirit of the Beehive",
    "uri": "https://boxd.it/24eY",
    "at": 1792659271456
-  },
-  {
-   "title": "Pan's Labyrinth",
-   "uri": "https://boxd.it/28No",
-   "at": 1792608875128
   }
  ]
 }
